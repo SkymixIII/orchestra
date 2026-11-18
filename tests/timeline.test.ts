@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyProject, type Camera, type Project } from '../src/lib/model';
-import { manualScore } from '../src/lib/storage';
+import { manualScore, normalizeMeasures } from '../src/lib/storage';
 import { advance, isPlaying, isSolo, measureAt, measureClock, numberTops, suggestInstruction, whereLabel } from '../src/lib/timeline';
 
 function project(): Project {
@@ -47,6 +47,17 @@ describe('lecture', () => {
     p.overrides['P1:0'] = false;
     expect(isPlaying(p, 'P3', 2)).toBe(true);
     expect(isPlaying(p, 'P1', 0)).toBe(false);
+  });
+});
+
+describe('projets enregistrés', () => {
+  it('recalcule la durée des mesures depuis le chiffrage', () => {
+    const ms = manualScore('T', ['A'], 3, 3, 8, 60).measures.map((m, i) => ({ ...m, quarters: [1.5, 2.5, 1][i] }));
+    expect(normalizeMeasures(ms).map((m) => [m.quarters, m.startQuarter])).toEqual([
+      [1.5, 0],
+      [1.5, 1.5],
+      [1.5, 3],
+    ]);
   });
 });
 

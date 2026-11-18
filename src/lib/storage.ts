@@ -27,6 +27,22 @@ export function clearLocal(): void {
   }
 }
 
+/**
+ * Recalcule la durée des mesures à partir de leur chiffrage (projets enregistrés avec une
+ * ancienne version, qui déduisait la durée des notes) : même chiffrage = même durée.
+ */
+export function normalizeMeasures(measures: Measure[]): Measure[] {
+  let start = 0;
+  return measures.map((m, i) => {
+    const [b, bt] = (m.time ?? '4/4').split('/').map(Number);
+    const nominal = b > 0 && bt > 0 ? (b * 4) / bt : m.quarters;
+    const quarters = i === 0 && m.quarters > 0 && m.quarters < nominal ? m.quarters : nominal;
+    const out = { ...m, quarters, startQuarter: start };
+    start += quarters;
+    return out;
+  });
+}
+
 export function validateProject(data: unknown): Project {
   const p = data as Project;
   if (!p || p.version !== 1 || !p.score?.parts || !p.score?.measures) {
@@ -34,6 +50,7 @@ export function validateProject(data: unknown): Project {
   }
   return {
     ...p,
+    score: { ...p.score, measures: normalizeMeasures(p.score.measures) },
     overrides: p.overrides ?? {},
     soloOverrides: p.soloOverrides ?? {},
     partColors: p.partColors ?? {},

@@ -76,7 +76,7 @@ function measuresByPart(root: Element): Map<string, Element[]> {
         if (!out.has(id)) out.set(id, []);
         // On garde l'attribut number de la mesure sur l'élément part.
         if (!p.hasAttribute('number')) p.setAttribute('number', m.getAttribute('number') ?? '');
-        if (m.getAttribute('implicit')) p.setAttribute('implicit', m.getAttribute('implicit')!);
+        
         out.get(id)!.push(p);
       }
     }
@@ -127,15 +127,15 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
   }
 
   const divisions = new Map<string, number>();
-  let timeBeats = 4;
-  let timeBeatType = 4;
+  // Chiffrage en vigueur pour chaque instrument (l'OCR peut en mal lire un sur une part).
+  const partTime = new Map<string, string>();
+  let lastTime = '4/4';
   let tempo = DEFAULT_TEMPO;
   let start = 0;
   const measures: Measure[] = [];
 
   for (let m = 0; m < measureCount; m++) {
     let label = String(m + 1);
-    let implicit = false;
     let actualQuarters = 0;
     let rehearsal: string | undefined;
     let measureTempo: number | undefined;
@@ -144,7 +144,6 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
       const el = byPart.get(p.id)?.[m];
       if (!el) return;
       if (pi === 0 || label === String(m + 1)) label = el.getAttribute('number') || label;
-      if (el.getAttribute('implicit') === 'yes') implicit = true;
 
       let div = divisions.get(p.id) ?? 1;
       let cursor = 0;
@@ -159,13 +158,10 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
               divisions.set(p.id, d);
             }
             const time = kid(child, 'time');
-            if (time && pi === 0) {
+            if (time) {
               const b = parseInt(text(time, 'beats') ?? '', 10);
               const bt = parseInt(text(time, 'beat-type') ?? '', 10);
-              if (b > 0 && bt > 0) {
-                timeBeats = b;
-                timeBeatType = bt;
-              }
+              if (b > 0 && bt > 0) partTime.set(p.id, `${b}/${bt}`);
             }
             break;
           }
@@ -201,17 +197,28 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
     });
 
     if (measureTempo) tempo = measureTempo;
+    // Chiffrage de la mesure = celui de la majorité des instruments.
+    const votes = new Map<string, number>();
+    for (const p of parts) {
+      const t = partTime.get(p.id);
+      if (t) votes.set(t, (votes.get(t) ?? 0) + 1);
+    }
+    let time = lastTime;
+    let best = 0;
+    for (const [t, n] of votes) if (n > best || (n === best && t === lastTime)) [time, best] = [t, n];
+    lastTime = time;
+    const [timeBeats, timeBeatType] = time.split('/').map(Number);
     const nominal = (timeBeats * 4) / timeBeatType;
     // La durée vient du chiffrage en vigueur, pas du contenu des notes (souvent faux après OCR).
-    // Seule exception : une vraie levée (mesure « implicit », ou première mesure incomplète).
-    const isPickup = (implicit || m === 0) && actualQuarters > 0 && actualQuarters < nominal;
+    // Seule exception : une levée (première mesure incomplète).
+    const isPickup = m === 0 && actualQuarters > 0 && actualQuarters < nominal;
     const quarters = isPickup ? actualQuarters : nominal;
     measures.push({
       label,
       quarters,
       startQuarter: start,
       tempo,
-      time: `${timeBeats}/${timeBeatType}`,
+      time,
       rehearsal,
     });
     start += quarters;

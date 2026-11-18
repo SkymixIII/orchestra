@@ -93,6 +93,23 @@ describe('durée des mesures', () => {
   });
 });
 
+describe('chiffrage issu de l’OCR', () => {
+  it('prend le chiffrage majoritaire et ignore les « implicit » en cours de morceau', () => {
+    const n = '<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>';
+    const t = (b: number, bt: number) => `<attributes><divisions>2</divisions><time><beats>${b}</beats><beat-type>${bt}</beat-type></time></attributes>`;
+    const part = (id: string, first: string, second: string) =>
+      `<part id="${id}"><measure number="1">${first}${n}</measure><measure number="2" implicit="yes">${second}${n}</measure><measure number="3">${n}</measure></part>`;
+    const xml = `<score-partwise><part-list>
+      <score-part id="A"><part-name>A</part-name></score-part><score-part id="B"><part-name>B</part-name></score-part><score-part id="C"><part-name>C</part-name></score-part>
+      </part-list>
+      ${part('A', t(3, 8), t(2, 4))}${part('B', t(3, 8), '')}${part('C', t(3, 8), '')}</score-partwise>`;
+    const s = parseMusicXml(xml);
+    // Mesure 1 : levée d'une croche. Mesure 2 : un seul instrument (mal lu) dit 2/4 → 3/8 retenu.
+    expect(s.measures.map((m) => m.time)).toEqual(['3/8', '3/8', '3/8']);
+    expect(s.measures.map((m) => m.quarters)).toEqual([0.5, 1.5, 1.5]);
+  });
+});
+
 describe('solos MusicXML', () => {
   it('suit « Solo » jusqu’à « Tutti » ou un silence', () => {
     const note = '<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>';
