@@ -80,6 +80,19 @@ describe('parseMusicXml', () => {
   });
 });
 
+describe('durée des mesures', () => {
+  it('suit le chiffrage même si les durées des notes sont fausses (OCR)', () => {
+    const n = (d: number) => `<note><pitch><step>C</step><octave>4</octave></pitch><duration>${d}</duration></note>`;
+    const xml = `<score-partwise><part-list><score-part id="A"><part-name>Cor</part-name></score-part></part-list><part id="A">
+      <measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>${n(4)}</measure>
+      <measure number="2">${n(4)}${n(2)}</measure>
+      <measure number="3">${n(1)}</measure>
+      <measure number="4"><attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>${n(5)}</measure>
+    </part></score-partwise>`;
+    expect(parseMusicXml(xml).measures.map((m) => m.quarters)).toEqual([4, 4, 4, 3]);
+  });
+});
+
 describe('solos MusicXML', () => {
   it('suit « Solo » jusqu’à « Tutti » ou un silence', () => {
     const note = '<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>';

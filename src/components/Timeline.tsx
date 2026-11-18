@@ -1,9 +1,9 @@
 import { memo, useEffect, useRef } from 'react';
-import type { Project } from '../lib/model';
-import { isPlaying, isSolo, numberTops, overrideKey, partColor, SOLO_COLOR } from '../lib/timeline';
+import type { Measure, Project } from '../lib/model';
+import { isPlaying, isSolo, measureAt, numberTops, overrideKey, partColor, SOLO_COLOR } from '../lib/timeline';
 
 /** Outil actif sur la timeline. */
-export type Tool = 'toggle' | 'erase' | 'solo';
+export type Tool = 'toggle' | 'play' | 'erase' | 'solo';
 
 /**
  * Largeur d'une noire en pixels. Chaque mesure a une largeur proportionnelle à sa durée,
@@ -11,14 +11,41 @@ export type Tool = 'toggle' | 'erase' | 'solo';
  * ou une levée ne la fait plus « accélérer »).
  */
 export const QUARTER_W = 7;
-const mx = (q: number) => q * QUARTER_W;
+/** Largeur fixe d'une mesure quand toutes les mesures ont la même taille. */
+export const MEASURE_W = 28;
+
+/** Positions horizontales des mesures et de la tête de lecture. */
+function layout(measures: Measure[], proportional: boolean) {
+  if (proportional) {
+    const last = measures[measures.length - 1];
+    return {
+      x: (i: number) => (measures[i]?.startQuarter ?? 0) * QUARTER_W,
+      w: (i: number) => (measures[i]?.quarters ?? 4) * QUARTER_W,
+      posX: (q: number) => q * QUARTER_W,
+      total: last ? (last.startQuarter + last.quarters) * QUARTER_W : 0,
+    };
+  }
+  return {
+    x: (i: number) => i * MEASURE_W,
+    w: () => MEASURE_W,
+    posX: (q: number) => {
+      const i = measureAt(measures, q);
+      const m = measures[i];
+      return m ? (i + Math.min(1, (q - m.startQuarter) / m.quarters)) * MEASURE_W : 0;
+    },
+    total: measures.length * MEASURE_W,
+  };
+}
 
 interface GridProps {
   project: Project;
   cameraColors: Record<string, string[]>;
   tool: Tool;
+  /** Largeur des mesures proportionnelle à leur durée (sinon toutes identiques). */
+  proportional: boolean;
   onToggleCell: (partId: string, m: number) => void;
   onEraseCell: (partId: string, m: number) => void;
+  onPlayCell: (partId: string, m: number) => void;
   onToggleSolo: (partId: string, m: number) => void;
   onSeek: (m: number) => void;
   onToggleCut: (m: number) => void;
@@ -30,32 +57,35 @@ const Grid = memo(function Grid({
   project,
   cameraColors,
   tool,
+  proportional,
   onToggleCell,
   onEraseCell,
+  onPlayCell,
   onToggleSolo,
   onSeek,
   onToggleCut,
   onSelectTop,
 }: GridProps) {
   const { measures, parts, activity } = project.score;
-  // Gomme : on efface toutes les cases survolées tant que le bouton est enfoncé.
-  const erasing = useRef(false);
+  const L = layout(measures, proportional);
+  // Gomme / « Joue » : on peint toutes les cases survolées tant que le bouton est enfoncé.
+  const painting = useRef(false);
+  const paint = tool === 'erase' ? onEraseCell : tool === 'play' ? onPlayCell : null;
   useEffect(() => {
-    const stop = () => (erasing.current = false);
+    const stop = () => (painting.current = false);
     window.addEventListener('pointerup', stop);
     return () => window.removeEventListener('pointerup', stop);
   }, []);
   const cuts = new Set(project.cutMeasures);
   const tops = numberTops(project);
-  const last = measures[measures.length - 1];
-  const width = last ? mx(last.startQuarter + last.quarters) : 0;
+  const width = L.total;
 
   return (
     <div className="grid" style={{ width }}>
       <div className="grid-row header rehearsal">
         {measures.map((m, i) =>
           m.rehearsal ? (
-            <span key={i} className="rehearsal-mark" style={{ left: mx(m.startQuarter) }}>
+            <span key={i} className="rehearsal-mark" style={{ left: L.x(i) }}>
               {m.rehearsal}
             </span>
           ) : null,
@@ -66,7 +96,7 @@ const Grid = memo(function Grid({
           <button
             key={t.top.id}
             className="top-flag"
-            style={{ left: mx(measures[t.top.measureIndex]?.startQuarter ?? 0) }}
+            style={{ left: L.x(t.top.measureIndex) }}
             title={t.top.note || `Top t${t.number}`}
             onClick={() => onSelectTop(t.top.id)}
           >
@@ -79,7 +109,7 @@ const Grid = memo(function Grid({
           <button
             key={i}
             className={`mnum${cuts.has(i) ? ' cut' : ''}`}
-            style={{ width: mx(m.quarters) }}
+            style={{ width: L.w(i) }}
             title={`Mesure ${m.label} · ${m.time} · ♩=${Math.round(m.tempo)}${cuts.has(i) ? ' · COUPÉE' : ''}\nClic : aller ici · Double-clic : couper/rétablir`}
             onClick={() => onSeek(i)}
             onDoubleClick={() => onToggleCut(i)}
@@ -92,7 +122,7 @@ const Grid = memo(function Grid({
         const color = partColor(project, p.id);
         return (
           <div className="grid-row" key={p.id}>
-            {measures.map((meas, i) => {
+            {measures.map((_, i) => {
               const on = isPlaying(project, p.id, i);
               const solo = on && isSolo(project, p.id, i);
               const o = project.overrides[overrideKey(p.id, i)];
@@ -107,18 +137,18 @@ const Grid = memo(function Grid({
                   className={cls}
                   title={solo ? `${p.name} : solo` : undefined}
                   style={{
-                    width: mx(meas.quarters),
+                    width: L.w(i),
                     ...(on ? { background: solo ? SOLO_COLOR : color } : {}),
                     ...(on && colors?.length ? { boxShadow: `inset 0 -3px 0 ${colors[0]}` } : {}),
                   }}
                   onPointerDown={(e) => {
-                    if (tool !== 'erase') return;
+                    if (!paint) return;
                     e.preventDefault();
-                    erasing.current = true;
-                    onEraseCell(p.id, i);
+                    painting.current = true;
+                    paint(p.id, i);
                   }}
                   onPointerEnter={() => {
-                    if (tool === 'erase' && erasing.current) onEraseCell(p.id, i);
+                    if (paint && painting.current) paint(p.id, i);
                   }}
                   onClick={() => {
                     if (tool === 'toggle') onToggleCell(p.id, i);
@@ -144,7 +174,7 @@ interface Props extends GridProps {
 export function Timeline(props: Props) {
   const { project, position, playing, cameraColors } = props;
   const scroller = useRef<HTMLDivElement>(null);
-  const x = mx(position);
+  const x = layout(project.score.measures, props.proportional).posX(position);
 
   // Suit la tête de lecture.
   useEffect(() => {
@@ -180,12 +210,14 @@ export function Timeline(props: Props) {
           </div>
         ))}
       </div>
-      <div className={`scroller tool-${props.tool}`} ref={scroller}>
+      <div className={`scroller tool-${props.tool === 'play' ? 'erase' : props.tool}`} ref={scroller}>
         <div className="scroll-inner">
           <Grid
             project={project}
             cameraColors={cameraColors}
             tool={props.tool}
+            proportional={props.proportional}
+            onPlayCell={props.onPlayCell}
             onToggleCell={props.onToggleCell}
             onEraseCell={props.onEraseCell}
             onToggleSolo={props.onToggleSolo}

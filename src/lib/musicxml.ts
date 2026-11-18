@@ -202,7 +202,10 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
 
     if (measureTempo) tempo = measureTempo;
     const nominal = (timeBeats * 4) / timeBeatType;
-    const quarters = implicit && actualQuarters > 0 ? actualQuarters : actualQuarters > 0 ? Math.max(actualQuarters, nominal) : nominal;
+    // La durée vient du chiffrage en vigueur, pas du contenu des notes (souvent faux après OCR).
+    // Seule exception : une vraie levée (mesure « implicit », ou première mesure incomplète).
+    const isPickup = (implicit || m === 0) && actualQuarters > 0 && actualQuarters < nominal;
+    const quarters = isPickup ? actualQuarters : nominal;
     measures.push({
       label,
       quarters,

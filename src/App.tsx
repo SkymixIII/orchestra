@@ -22,6 +22,7 @@ export default function App() {
   const [held, setHeld] = useState<Set<string>>(new Set());
   const [selectedTop, setSelectedTop] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>('toggle');
+  const [proportional, setProportional] = useState(false);
 
   useEffect(() => {
     if (project) saveLocal(project);
@@ -147,6 +148,19 @@ export default function App() {
         if (p.score.activity[partId]?.[m]) overrides[key] = false;
         else delete overrides[key];
         return { ...p, overrides };
+      }),
+    [update],
+  );
+
+  // « Joue (pas solo) » : l'instrument joue, et n'est jamais compté comme solo sur cette case.
+  const playCell = useCallback(
+    (partId: string, m: number) =>
+      update((p) => {
+        const key = overrideKey(partId, m);
+        const overrides = { ...p.overrides };
+        if (p.score.activity[partId]?.[m]) delete overrides[key];
+        else overrides[key] = true;
+        return { ...p, overrides, soloOverrides: { ...p.soloOverrides, [key]: false } };
       }),
     [update],
   );
@@ -374,18 +388,27 @@ export default function App() {
         <button className={tool === 'toggle' ? 'active' : ''} onClick={() => setTool('toggle')} title="Clic sur une case : l'instrument joue / ne joue pas">
           ✎ Ajouter / retirer
         </button>
+        <button className={tool === 'play' ? 'active' : ''} onClick={() => setTool('play')} title="Cliquer-glisser : l'instrument joue, sans être compté comme solo">
+          ♪ Joue (pas solo)
+        </button>
         <button className={tool === 'erase' ? 'active' : ''} onClick={() => setTool('erase')} title="Cliquer-glisser sur les cases pour les effacer">
           ⌫ Gomme
         </button>
         <button className={tool === 'solo' ? 'active solo' : 'solo'} onClick={() => setTool('solo')} title="Clic sur une case jouée : marquer / retirer un solo">
           ★ Solo
         </button>
-        <span className="hint">Couleur d'un instrument : cliquez sur la pastille à gauche de son nom.</span>
+        <label className="small" title="Cochée : une mesure à 3/4 est plus étroite qu'une 4/4 et la tête de lecture avance à vitesse constante. Décochée : toutes les mesures ont la même largeur.">
+          <input type="checkbox" checked={proportional} onChange={(e) => setProportional(e.target.checked)} />
+          Largeur selon la durée
+        </label>
+        <span className="hint">Couleur d'un instrument : pastille à gauche de son nom.</span>
       </div>
 
       <Timeline
         project={project}
         tool={tool}
+        proportional={proportional}
+        onPlayCell={playCell}
         onEraseCell={eraseCell}
         onToggleSolo={toggleSolo}
         onPartColor={setPartColor}
