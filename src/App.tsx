@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CamerasPanel, CAMERA_COLORS } from './components/CamerasPanel';
 import { ImportPanel } from './components/ImportPanel';
 import { PrintView } from './components/PrintView';
-import { Timeline } from './components/Timeline';
+import { Timeline, type Tool } from './components/Timeline';
 import { TopsPanel } from './components/TopsPanel';
 import type { Project, Score } from './lib/model';
 import { emptyProject, newId } from './lib/model';
 import { clearLocal, downloadJson, loadLocal, saveLocal } from './lib/storage';
-import { advance, isPlaying, measureAt, nextPlayable, overrideKey } from './lib/timeline';
+import { advance, isPlaying, isSolo, measureAt, nextPlayable, overrideKey } from './lib/timeline';
 
 /** Touches clavier des boutons d'instruments (T, espace et flèches sont réservées). */
 const PAD_KEYS = '1234567890azeryuiopqsdfghjklmwxcvbn'.split('');
@@ -20,6 +20,7 @@ export default function App() {
   const [bpmOverride, setBpmOverride] = useState<number | null>(null);
   const [held, setHeld] = useState<Set<string>>(new Set());
   const [selectedTop, setSelectedTop] = useState<string | null>(null);
+  const [tool, setTool] = useState<Tool>('toggle');
 
   useEffect(() => {
     if (project) saveLocal(project);
@@ -128,6 +129,39 @@ export default function App() {
         else overrides[key] = target;
         return { ...p, overrides };
       }),
+    [update],
+  );
+
+  const eraseCell = useCallback(
+    (partId: string, m: number) =>
+      update((p) => {
+        if (!isPlaying(p, partId, m)) return p;
+        const overrides = { ...p.overrides };
+        const key = overrideKey(partId, m);
+        if (p.score.activity[partId]?.[m]) overrides[key] = false;
+        else delete overrides[key];
+        return { ...p, overrides };
+      }),
+    [update],
+  );
+
+  const toggleSolo = useCallback(
+    (partId: string, m: number) =>
+      update((p) => {
+        if (!isPlaying(p, partId, m)) return p;
+        const soloOverrides = { ...p.soloOverrides };
+        const key = overrideKey(partId, m);
+        delete soloOverrides[key];
+        const auto = isSolo({ ...p, soloOverrides }, partId, m);
+        const current = isSolo(p, partId, m);
+        if (auto !== !current) soloOverrides[key] = !current;
+        return { ...p, soloOverrides };
+      }),
+    [update],
+  );
+
+  const setPartColor = useCallback(
+    (partId: string, color: string) => update((p) => ({ ...p, partColors: { ...p.partColors, [partId]: color } })),
     [update],
   );
 
@@ -302,8 +336,26 @@ export default function App() {
         ))}
       </div>
 
+      <div className="tools" role="toolbar" aria-label="Outils de la timeline">
+        <span className="small">Outil :</span>
+        <button className={tool === 'toggle' ? 'active' : ''} onClick={() => setTool('toggle')} title="Clic sur une case : l'instrument joue / ne joue pas">
+          ✎ Ajouter / retirer
+        </button>
+        <button className={tool === 'erase' ? 'active' : ''} onClick={() => setTool('erase')} title="Cliquer-glisser sur les cases pour les effacer">
+          ⌫ Gomme
+        </button>
+        <button className={tool === 'solo' ? 'active solo' : 'solo'} onClick={() => setTool('solo')} title="Clic sur une case jouée : marquer / retirer un solo">
+          ★ Solo
+        </button>
+        <span className="hint">Couleur d'un instrument : cliquez sur la pastille à gauche de son nom.</span>
+      </div>
+
       <Timeline
         project={project}
+        tool={tool}
+        onEraseCell={eraseCell}
+        onToggleSolo={toggleSolo}
+        onPartColor={setPartColor}
         position={{ measure: currentMeasure, fraction }}
         playing={playing}
         cameraColors={cameraColors}
@@ -313,8 +365,8 @@ export default function App() {
         onSelectTop={selectTop}
       />
       <p className="hint legend">
-        <i className="lg on" /> joue (partition) <i className="lg manual" /> ajouté à la main <i className="lg muted" /> retiré à la main{' '}
-        <i className="lg cut" /> mesure coupée · Clic sur une case : ajouter/retirer · Clic sur un numéro : y aller · Double-clic : couper
+        <i className="lg on" /> joue <i className="lg solo" /> solo <i className="lg manual" /> ajouté à la main <i className="lg muted" /> retiré à la main{' '}
+        <i className="lg cut" /> mesure coupée · Clic sur un numéro : y aller · Double-clic : couper
       </p>
 
       <div className="panels">

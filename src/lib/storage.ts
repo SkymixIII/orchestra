@@ -35,6 +35,8 @@ export function validateProject(data: unknown): Project {
   return {
     ...p,
     overrides: p.overrides ?? {},
+    soloOverrides: p.soloOverrides ?? {},
+    partColors: p.partColors ?? {},
     cutMeasures: p.cutMeasures ?? [],
     tops: p.tops ?? [],
     cameras: p.cameras ?? [],

@@ -85,15 +85,16 @@ kbd { font-family: ui-monospace, monospace; font-size: 11px; border: 1px solid v
 .mnum.cut { text-decoration: line-through; background: repeating-linear-gradient(45deg, #eee, #eee 3px, #fff 3px, #fff 6px); }
 .cell { flex: 0 0 auto; border-right: 1px solid #f0efeb; cursor: pointer; }
 .cell:hover { outline: 1px solid var(--ink); outline-offset: -1px; }
-.cell.on { background: var(--on); }
-.cell.manual { background: var(--manual); }
+.cell { position: relative; }
+.cell.manual::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; }
 .cell.muted { background: repeating-linear-gradient(45deg, #fff, #fff 3px, #cfdde5 3px, #cfdde5 6px); }
 .cell.cut { opacity: .25; }
 .playhead { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: 3; will-change: transform; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
 .lg { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-left: 6px; }
 .lg.on { background: var(--on); }
-.lg.manual { background: var(--manual); }
+.lg.manual { background: radial-gradient(circle, #fff 2px, var(--on) 2.5px); }
+.lg.solo { background: #d62828; }
 .lg.muted { background: repeating-linear-gradient(45deg, #fff, #fff 2px, #cfdde5 2px, #cfdde5 4px); border: 1px solid var(--line); }
 .lg.cut { background: repeating-linear-gradient(45deg, #ddd, #ddd 2px, #fff 2px, #fff 4px); border: 1px solid var(--line); }
 
@@ -150,3 +151,16 @@ kbd { font-family: ui-monospace, monospace; font-size: 11px; border: 1px solid v
   .sheet:last-child { page-break-after: auto; break-after: auto; }
   @page { margin: 14mm; }
 }
+
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tools button.active { background: var(--ink); color: #fff; }
+.tools button.solo.active { background: #d62828; border-color: #d62828; }
+.scroller.tool-erase .cell { cursor: cell; }
+.scroller.tool-solo .cell.on { cursor: crosshair; }
+.pcolor { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; flex: 0 0 auto; }
+.pcolor::-webkit-color-swatch-wrapper { padding: 0; }
+.pcolor::-webkit-color-swatch { border: 1px solid rgba(0,0,0,.2); border-radius: 50%; }
+.name { justify-content: flex-start; }
+.name .pname { flex: 1; }
+.cam-name { font-weight: 700; font-size: 15px; }
+.cam .field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); flex: 1; min-width: 100px; }

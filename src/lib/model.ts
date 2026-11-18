@@ -28,6 +28,8 @@ export interface Score {
   measures: Measure[];
   /** activity[partId][measureIndex] = true si l'instrument joue dans la mesure. */
   activity: Record<string, boolean[]>;
+  /** solo[partId][measureIndex] = true si la partition indique un solo (« Solo », « Soli »). */
+  solo?: Record<string, boolean[]>;
   source: 'musicxml' | 'omr' | 'manuel';
 }
 
@@ -57,6 +59,10 @@ export interface Project {
    * true = l'instrument joue (ajouté pendant la lecture), false = forcé silencieux.
    */
   overrides: Record<string, boolean>;
+  /** Solos ajoutés (true) ou retirés (false) à la main, clé `${partId}:${measureIndex}`. */
+  soloOverrides?: Record<string, boolean>;
+  /** Couleur choisie pour chaque instrument (clé = id de l'instrument). */
+  partColors?: Record<string, string>;
   /** Mesures coupées (sautées à la lecture). */
   cutMeasures: number[];
   tops: Top[];
@@ -68,5 +74,5 @@ export function newId(prefix: string): string {
 }
 
 export function emptyProject(score: Score): Project {
-  return { version: 1, score, overrides: {}, cutMeasures: [], tops: [], cameras: [] };
+  return { version: 1, score, overrides: {}, soloOverrides: {}, partColors: {}, cutMeasures: [], tops: [], cameras: [] };
 }

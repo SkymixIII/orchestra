@@ -9,6 +9,26 @@ export function isPlaying(project: Project, partId: string, m: number): boolean 
   return project.score.activity[partId]?.[m] ?? false;
 }
 
+/**
+ * L'instrument a-t-il un solo dans la mesure m ? Correction manuelle, sinon indication
+ * « Solo » de la partition, sinon seul instrument à jouer dans la mesure.
+ */
+export function isSolo(project: Project, partId: string, m: number): boolean {
+  if (!isPlaying(project, partId, m)) return false;
+  const o = project.soloOverrides?.[overrideKey(partId, m)];
+  if (o !== undefined) return o;
+  if (project.score.solo?.[partId]?.[m]) return true;
+  const parts = project.score.parts;
+  return parts.length > 1 && parts.every((p) => p.id === partId || !isPlaying(project, p.id, m));
+}
+
+export const DEFAULT_PART_COLOR = '#2f6f8f';
+export const SOLO_COLOR = '#d62828';
+
+export function partColor(project: Project, partId: string): string {
+  return project.partColors?.[partId] ?? DEFAULT_PART_COLOR;
+}
+
 /** Index de la mesure contenant la position `q` (en noires). */
 export function measureAt(measures: Measure[], q: number): number {
   let lo = 0;
@@ -134,6 +154,13 @@ export function suggestInstruction(project: Project, camera: Camera, tops: Numbe
   if (!now.length) {
     return before.length ? `Libre (${before.map(name).join(', ')} s'arrête${before.length > 1 ? 'nt' : ''})` : '';
   }
-  const label = now.map((id) => (index > 0 && !before.includes(id) ? `${name(id)} (entrée)` : name(id)));
+  const soloIn = (id: string) => {
+    for (let m = nt.top.measureIndex; m < nt.endMeasure; m++) if (isSolo(project, id, m)) return true;
+    return false;
+  };
+  const label = now.map((id) => {
+    const tags = [index > 0 && !before.includes(id) ? 'entrée' : '', soloIn(id) ? 'solo' : ''].filter(Boolean);
+    return tags.length ? `${name(id)} (${tags.join(', ')})` : name(id);
+  });
   return `Cadrer ${label.join(', ')}`;
 }

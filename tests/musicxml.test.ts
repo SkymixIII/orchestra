@@ -80,6 +80,23 @@ describe('parseMusicXml', () => {
   });
 });
 
+describe('solos MusicXML', () => {
+  it('suit « Solo » jusqu’à « Tutti » ou un silence', () => {
+    const note = '<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>';
+    const rest = '<note><rest/><duration>4</duration></note>';
+    const words = (t: string) => `<direction><direction-type><words>${t}</words></direction-type></direction>`;
+    const xml = `<score-partwise><part-list><score-part id="H"><part-name>Hautbois</part-name></score-part></part-list><part id="H">
+      <measure number="1"><attributes><divisions>1</divisions></attributes>${words('Solo')}${note}</measure>
+      <measure number="2">${note}</measure>
+      <measure number="3">${words('Tutti')}${note}</measure>
+      <measure number="4">${words('solo espressivo')}${note}</measure>
+      <measure number="5">${rest}</measure>
+      <measure number="6">${note}</measure>
+    </part></score-partwise>`;
+    expect(parseMusicXml(xml).solo?.H).toEqual([true, true, false, true, false, false]);
+  });
+});
+
 describe('unzipMxl', () => {
   it('extrait la partition désignée par container.xml', () => {
     const zip = zipSync({

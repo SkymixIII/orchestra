@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyProject, type Camera, type Project } from '../src/lib/model';
 import { manualScore } from '../src/lib/storage';
-import { advance, isPlaying, measureAt, measureClock, numberTops, suggestInstruction, whereLabel } from '../src/lib/timeline';
+import { advance, isPlaying, isSolo, measureAt, measureClock, numberTops, suggestInstruction, whereLabel } from '../src/lib/timeline';
 
 function project(): Project {
   const score = manualScore('Test', ['Violons', 'Cors', 'Flûtes'], 12, 4, 4, 60);
@@ -50,6 +50,25 @@ describe('lecture', () => {
   });
 });
 
+describe('solos', () => {
+  it('détecte un instrument seul, suit la partition et les corrections manuelles', () => {
+    const p = project();
+    // Mesure 1 : violons seuls → solo automatique.
+    expect(isSolo(p, 'P1', 0)).toBe(true);
+    // Mesure 5 : violons + cors → pas de solo.
+    expect(isSolo(p, 'P1', 4)).toBe(false);
+    p.score.solo = { P2: new Array(12).fill(false) };
+    p.score.solo.P2[4] = true;
+    expect(isSolo(p, 'P2', 4)).toBe(true);
+    p.soloOverrides = { 'P2:4': false, 'P1:4': true };
+    expect(isSolo(p, 'P2', 4)).toBe(false);
+    expect(isSolo(p, 'P1', 4)).toBe(true);
+    // Un instrument qui ne joue pas n'a jamais de solo.
+    p.soloOverrides['P3:4'] = true;
+    expect(isSolo(p, 'P3', 4)).toBe(false);
+  });
+});
+
 describe('tops et consignes', () => {
   const cam = (partIds: string[]): Camera => ({ id: 'c', name: 'Cam', partIds, instructions: {} });
 
@@ -86,13 +105,14 @@ describe('tops et consignes', () => {
       '',
       '',
       'Cadrer Cors (entrée)',
-      'Cadrer Cors',
+      // Les cors jouent seuls dans les mesures 7 à 10 : solo détecté automatiquement.
+      'Cadrer Cors (solo)',
       "Libre (Cors s'arrête)",
     ]);
     const cordes = cam(['P1', 'P2']);
-    expect(suggestInstruction(p, cordes, tops, 0)).toBe('Cadrer Violons');
-    expect(suggestInstruction(p, cordes, tops, 1)).toBe('Cadrer Violons');
+    expect(suggestInstruction(p, cordes, tops, 0)).toBe('Cadrer Violons (solo)');
+    expect(suggestInstruction(p, cordes, tops, 1)).toBe('Cadrer Violons (solo)');
     expect(suggestInstruction(p, cordes, tops, 2)).toBe('Cadrer Violons, Cors (entrée)');
-    expect(suggestInstruction(p, cordes, tops, 3)).toBe('Cadrer Cors');
+    expect(suggestInstruction(p, cordes, tops, 3)).toBe('Cadrer Cors (solo)');
   });
 });

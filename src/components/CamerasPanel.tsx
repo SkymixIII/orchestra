@@ -44,13 +44,21 @@ export function CamerasPanel({ project, update }: Props) {
           <div className="cam" key={c.id} style={{ borderColor: CAMERA_COLORS[ci % CAMERA_COLORS.length] }}>
             <div className="row">
               <i className="swatch" style={{ background: CAMERA_COLORS[ci % CAMERA_COLORS.length] }} />
-              <input value={c.name} onChange={(e) => setCam(c.id, { name: e.target.value })} aria-label="Nom de la caméra" />
-              <input
-                placeholder="Cadreur"
-                value={c.operator ?? ''}
-                onChange={(e) => setCam(c.id, { operator: e.target.value })}
-                aria-label="Cadreur"
-              />
+              <label className="field">
+                Nom de la caméra
+                <input
+                  className="cam-name"
+                  value={c.name}
+                  placeholder={`Caméra ${ci + 1}`}
+                  onChange={(e) => setCam(c.id, { name: e.target.value })}
+                  onFocus={(e) => e.target.select()}
+                  onBlur={(e) => !e.target.value.trim() && setCam(c.id, { name: `Caméra ${ci + 1}` })}
+                />
+              </label>
+              <label className="field">
+                Cadreur
+                <input placeholder="Prénom" value={c.operator ?? ''} onChange={(e) => setCam(c.id, { operator: e.target.value })} />
+              </label>
               <button
                 className="ghost"
                 title="Supprimer la caméra"

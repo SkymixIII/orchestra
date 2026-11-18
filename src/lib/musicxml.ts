@@ -45,6 +45,17 @@ function tempoIn(measure: Element): number | undefined {
   return undefined;
 }
 
+/** Indication de solo / fin de solo dans le texte d'une mesure. */
+function soloMarkIn(measure: Element): 'solo' | 'tutti' | undefined {
+  let mark: 'solo' | 'tutti' | undefined;
+  for (const w of descendants(measure, 'words')) {
+    const t = (w.textContent ?? '').toLowerCase();
+    if (/\b(solo|soli|soliste)\b/.test(t)) mark = 'solo';
+    else if (/\b(tutti|tous|a ?2|à ?2|unis)\b/.test(t)) mark = 'tutti';
+  }
+  return mark;
+}
+
 function rehearsalIn(measure: Element): string | undefined {
   for (const r of descendants(measure, 'rehearsal')) {
     const t = r.textContent?.trim();
@@ -108,7 +119,12 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
   const measureCount = Math.max(0, ...parts.map((p) => byPart.get(p.id)?.length ?? 0));
 
   const activity: Record<string, boolean[]> = {};
-  for (const p of parts) activity[p.id] = new Array(measureCount).fill(false);
+  const solo: Record<string, boolean[]> = {};
+  const inSolo = new Map<string, boolean>();
+  for (const p of parts) {
+    activity[p.id] = new Array(measureCount).fill(false);
+    solo[p.id] = new Array(measureCount).fill(false);
+  }
 
   const divisions = new Map<string, number>();
   let timeBeats = 4;
@@ -175,6 +191,11 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
       }
       actualQuarters = Math.max(actualQuarters, maxCursor / div);
       activity[p.id][m] = plays;
+      // Un « Solo » vaut jusqu'à « Tutti » ou jusqu'à la première mesure de silence.
+      const mark = soloMarkIn(el);
+      if (mark) inSolo.set(p.id, mark === 'solo');
+      if (!plays) inSolo.set(p.id, false);
+      solo[p.id][m] = plays && !!inSolo.get(p.id);
       rehearsal ??= rehearsalIn(el);
       measureTempo ??= tempoIn(el);
     });
@@ -196,7 +217,7 @@ export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml')
   if (!parts.length || !measures.length) {
     throw new Error('Aucun instrument ou aucune mesure trouvé dans ce MusicXML.');
   }
-  return { title, parts, measures, activity, source };
+  return { title, parts, measures, activity, solo, source };
 }
 
 /** Extrait le MusicXML principal d'une archive .mxl (MusicXML compressé). */
