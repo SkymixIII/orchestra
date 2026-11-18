@@ -122,20 +122,18 @@ export function cameraPartsPlaying(project: Project, camera: Camera, nt: Numbere
 }
 
 /**
- * Consigne proposée automatiquement pour une caméra à un top :
- * vide si rien ne change pour ses instruments (le cadreur n'a rien à faire).
+ * Consigne proposée automatiquement pour une caméra à un top. Une consigne vaut
+ * jusqu'au top suivant : on la répète donc tant que ses instruments jouent.
+ * Vide = le cadreur n'a rien à faire pendant ce top.
  */
 export function suggestInstruction(project: Project, camera: Camera, tops: NumberedTop[], index: number): string {
   const nt = tops[index];
   const name = (id: string) => project.score.parts.find((p) => p.id === id)?.name ?? id;
   const now = cameraPartsPlaying(project, camera, nt);
   const before = index > 0 ? cameraPartsPlaying(project, camera, tops[index - 1]) : [];
-  const same = now.length === before.length && now.every((id) => before.includes(id));
-  if (index > 0 && same) return '';
   if (!now.length) {
     return before.length ? `Libre (${before.map(name).join(', ')} s'arrête${before.length > 1 ? 'nt' : ''})` : '';
   }
-  const entering = now.filter((id) => !before.includes(id));
-  const label = now.map((id) => (entering.includes(id) && index > 0 ? `${name(id)} (entrée)` : name(id)));
+  const label = now.map((id) => (index > 0 && !before.includes(id) ? `${name(id)} (entrée)` : name(id)));
   return `Cadrer ${label.join(', ')}`;
 }

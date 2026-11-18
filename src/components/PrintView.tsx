@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Camera, Project } from '../lib/model';
-import { cameraPartsPlaying, formatClock, measureClock, numberTops, whereLabel } from '../lib/timeline';
+import { cameraPartsPlaying, numberTops, whereLabel } from '../lib/timeline';
 
 interface Props {
   project: Project;
@@ -9,7 +9,6 @@ interface Props {
 
 function CameraSheet({ project, camera }: { project: Project; camera: Camera }) {
   const tops = numberTops(project);
-  const clock = measureClock(project.score.measures, new Set(project.cutMeasures));
   const partName = (id: string) => project.score.parts.find((p) => p.id === id)?.name ?? id;
   const nextActionAfter = (i: number) => tops.slice(i + 1).find((t) => camera.instructions[t.top.id]?.trim());
   const actions = tops.filter((t) => camera.instructions[t.top.id]?.trim()).length;
@@ -38,17 +37,18 @@ function CameraSheet({ project, camera }: { project: Project; camera: Camera }) 
             <li key={nt.top.id} className={text ? 'action' : 'idle'}>
               <div className="where">
                 <span className="tnum">t{nt.number}</span>
-                {/* Les cadreurs n'ont pas la partition : pas de mesures ni de repères ici. */}
-                <span className="loc">
-                  <span className="clock">≈ {formatClock(clock[nt.top.measureIndex] ?? 0)}</span>
-                  {nt.top.note && <span className="cue"> · {nt.top.note}</span>}
-                </span>
+                {/* Les cadreurs n'ont pas la partition : ni mesures, ni repères, ni minutage. */}
+                {text && <span className="arrow">→</span>}
               </div>
               <div className="what">
                 {text ? (
                   <>
                     <p>{text}</p>
-                    {playing.length > 0 && <small>Jouent : {playing.map(partName).join(', ')}</small>}
+                    <small>
+                      {i + 1 < tops.length ? `jusqu'à t${tops[i + 1].number}` : "jusqu'à la fin"}
+                      {nt.top.note ? ` · ${nt.top.note}` : ''}
+                      {playing.length > 0 ? ` · jouent : ${playing.map(partName).join(', ')}` : ''}
+                    </small>
                   </>
                 ) : (
                   <p className="nothing">
@@ -66,7 +66,6 @@ function CameraSheet({ project, camera }: { project: Project; camera: Camera }) 
 
 function DirectorSheet({ project }: { project: Project }) {
   const tops = numberTops(project);
-  const clock = measureClock(project.score.measures, new Set(project.cutMeasures));
   return (
     <section className="sheet director">
       <header>
@@ -92,7 +91,6 @@ function DirectorSheet({ project }: { project: Project }) {
             <tr key={nt.top.id}>
               <td className="where">
                 <strong>{whereLabel(project, nt)}</strong>
-                <small> ≈ {formatClock(clock[nt.top.measureIndex] ?? 0)}</small>
                 {nt.top.note && <div>{nt.top.note}</div>}
               </td>
               {project.cameras.map((c) => (

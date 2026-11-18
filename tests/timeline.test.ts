@@ -71,7 +71,7 @@ describe('tops et consignes', () => {
     expect(whereLabel(p, tops[2])).toBe('t3 · mes. 7 · repère A +2');
   });
 
-  it('propose une consigne seulement quand quelque chose change pour la caméra', () => {
+  it('propose une consigne tant que les instruments de la caméra jouent', () => {
     const p = project();
     p.tops = [
       { id: 't1', measureIndex: 0 },
@@ -86,12 +86,12 @@ describe('tops et consignes', () => {
       '',
       '',
       'Cadrer Cors (entrée)',
-      '',
+      'Cadrer Cors',
       "Libre (Cors s'arrête)",
     ]);
     const cordes = cam(['P1', 'P2']);
     expect(suggestInstruction(p, cordes, tops, 0)).toBe('Cadrer Violons');
-    expect(suggestInstruction(p, cordes, tops, 1)).toBe('');
+    expect(suggestInstruction(p, cordes, tops, 1)).toBe('Cadrer Violons');
     expect(suggestInstruction(p, cordes, tops, 2)).toBe('Cadrer Violons, Cors (entrée)');
     expect(suggestInstruction(p, cordes, tops, 3)).toBe('Cadrer Cors');
   });
