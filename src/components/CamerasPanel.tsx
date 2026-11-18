@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { Camera, Project } from '../lib/model';
 import { newId } from '../lib/model';
 
-export const CAMERA_COLORS = ['#e4572e', '#2e86ab', '#17a398', '#f3a712', '#a23b72', '#6a4c93', '#3bb273', '#c06c84', '#355070', '#8a5a44'];
+import { CAMERA_COLORS } from '../lib/colors';
+
+export { CAMERA_COLORS };
 
 interface Props {
   project: Project;
