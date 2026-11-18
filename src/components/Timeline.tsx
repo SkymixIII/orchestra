@@ -5,7 +5,13 @@ import { isPlaying, isSolo, numberTops, overrideKey, partColor, SOLO_COLOR } fro
 /** Outil actif sur la timeline. */
 export type Tool = 'toggle' | 'erase' | 'solo';
 
-export const MEASURE_W = 26;
+/**
+ * Largeur d'une noire en pixels. Chaque mesure a une largeur proportionnelle à sa durée,
+ * pour que la tête de lecture avance à vitesse constante à BPM constant (une mesure à 3/4
+ * ou une levée ne la fait plus « accélérer »).
+ */
+export const QUARTER_W = 7;
+const mx = (q: number) => q * QUARTER_W;
 
 interface GridProps {
   project: Project;
@@ -41,14 +47,15 @@ const Grid = memo(function Grid({
   }, []);
   const cuts = new Set(project.cutMeasures);
   const tops = numberTops(project);
-  const width = measures.length * MEASURE_W;
+  const last = measures[measures.length - 1];
+  const width = last ? mx(last.startQuarter + last.quarters) : 0;
 
   return (
     <div className="grid" style={{ width }}>
       <div className="grid-row header rehearsal">
         {measures.map((m, i) =>
           m.rehearsal ? (
-            <span key={i} className="rehearsal-mark" style={{ left: i * MEASURE_W }}>
+            <span key={i} className="rehearsal-mark" style={{ left: mx(m.startQuarter) }}>
               {m.rehearsal}
             </span>
           ) : null,
@@ -59,7 +66,7 @@ const Grid = memo(function Grid({
           <button
             key={t.top.id}
             className="top-flag"
-            style={{ left: t.top.measureIndex * MEASURE_W }}
+            style={{ left: mx(measures[t.top.measureIndex]?.startQuarter ?? 0) }}
             title={t.top.note || `Top t${t.number}`}
             onClick={() => onSelectTop(t.top.id)}
           >
@@ -72,7 +79,7 @@ const Grid = memo(function Grid({
           <button
             key={i}
             className={`mnum${cuts.has(i) ? ' cut' : ''}`}
-            style={{ width: MEASURE_W }}
+            style={{ width: mx(m.quarters) }}
             title={`Mesure ${m.label} · ${m.time} · ♩=${Math.round(m.tempo)}${cuts.has(i) ? ' · COUPÉE' : ''}\nClic : aller ici · Double-clic : couper/rétablir`}
             onClick={() => onSeek(i)}
             onDoubleClick={() => onToggleCut(i)}
@@ -85,7 +92,7 @@ const Grid = memo(function Grid({
         const color = partColor(project, p.id);
         return (
           <div className="grid-row" key={p.id}>
-            {measures.map((_, i) => {
+            {measures.map((meas, i) => {
               const on = isPlaying(project, p.id, i);
               const solo = on && isSolo(project, p.id, i);
               const o = project.overrides[overrideKey(p.id, i)];
@@ -100,7 +107,7 @@ const Grid = memo(function Grid({
                   className={cls}
                   title={solo ? `${p.name} : solo` : undefined}
                   style={{
-                    width: MEASURE_W,
+                    width: mx(meas.quarters),
                     ...(on ? { background: solo ? SOLO_COLOR : color } : {}),
                     ...(on && colors?.length ? { boxShadow: `inset 0 -3px 0 ${colors[0]}` } : {}),
                   }}
@@ -128,7 +135,8 @@ const Grid = memo(function Grid({
 });
 
 interface Props extends GridProps {
-  position: { measure: number; fraction: number };
+  /** Position de lecture, en noires. */
+  position: number;
   playing: boolean;
   onPartColor: (partId: string, color: string) => void;
 }
@@ -136,7 +144,7 @@ interface Props extends GridProps {
 export function Timeline(props: Props) {
   const { project, position, playing, cameraColors } = props;
   const scroller = useRef<HTMLDivElement>(null);
-  const x = (position.measure + position.fraction) * MEASURE_W;
+  const x = mx(position);
 
   // Suit la tête de lecture.
   useEffect(() => {

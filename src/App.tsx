@@ -6,6 +6,7 @@ import { Timeline, type Tool } from './components/Timeline';
 import { TopsPanel } from './components/TopsPanel';
 import type { Project, Score } from './lib/model';
 import { emptyProject, newId } from './lib/model';
+import { STAGE_CHANNEL, stageState, type StageMessage } from './lib/stage';
 import { clearLocal, downloadJson, loadLocal, saveLocal } from './lib/storage';
 import { advance, isPlaying, isSolo, measureAt, nextPlayable, overrideKey } from './lib/timeline';
 
@@ -31,7 +32,10 @@ export default function App() {
   const measures = project?.score.measures ?? [];
   const cuts = useMemo(() => new Set(project?.cutMeasures ?? []), [project?.cutMeasures]);
   const currentMeasure = measureAt(measures, pos);
-  const scoreTempo = measures[currentMeasure]?.tempo ?? 120;
+  // Tempo stable par défaut : celui du début de la pièce. Les changements de tempo écrits
+  // dans la partition ne s'appliquent que si l'on coche « suivre la partition ».
+  const [followScoreTempo, setFollowScoreTempo] = useState(false);
+  const scoreTempo = (followScoreTempo ? measures[currentMeasure]?.tempo : measures[0]?.tempo) ?? 120;
   const bpm = bpmOverride ?? scoreTempo;
 
   // ---- Marquage d'instruments (bouton enfoncé = l'instrument joue) ----
@@ -73,10 +77,13 @@ export default function App() {
 
   useEffect(() => {
     if (!playing) return;
-    let raf = 0;
     let last = performance.now();
     state.current.pos = pos;
-    const tick = (now: number) => {
+    // Horloge à intervalle fixe (et non requestAnimationFrame, qui s'arrête quand la fenêtre
+    // de la régie passe en arrière-plan, par exemple derrière l'écran des instruments).
+    // La position est toujours calculée à partir du temps réellement écoulé.
+    const tick = () => {
+      const now = performance.now();
       const s = state.current;
       const next = advance(s.measures, s.cuts, s.pos, (now - last) / 1000, s.bpm);
       last = now;
@@ -91,10 +98,9 @@ export default function App() {
         if (s.held.size) markPlaying(s.held, m);
       }
       setPos(next);
-      raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const timer = window.setInterval(tick, 20);
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
@@ -183,6 +189,24 @@ export default function App() {
     [project?.tops, seekMeasure],
   );
 
+  // ---- Écran des instruments (autre fenêtre), synchronisé par BroadcastChannel ----
+  const channel = useRef<BroadcastChannel | null>(null);
+  const stageRef = useRef<ReturnType<typeof stageState> | null>(null);
+  stageRef.current = project ? stageState(project, currentMeasure, playing) : null;
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel(STAGE_CHANNEL);
+    channel.current = ch;
+    ch.onmessage = (e: MessageEvent<StageMessage>) => {
+      if (e.data.type === 'hello' && stageRef.current) ch.postMessage({ type: 'state', state: stageRef.current } satisfies StageMessage);
+    };
+    return () => ch.close();
+  }, []);
+  const stageKey = JSON.stringify(stageRef.current);
+  useEffect(() => {
+    if (stageRef.current) channel.current?.postMessage({ type: 'state', state: stageRef.current } satisfies StageMessage);
+  }, [stageKey]);
+
   // ---- Clavier ----
   const parts = project?.score.parts ?? [];
   useEffect(() => {
@@ -239,7 +263,6 @@ export default function App() {
   }
 
   const m = measures[currentMeasure];
-  const fraction = m ? (pos - m.startQuarter) / m.quarters : 0;
 
   return (
     <div className="app">
@@ -252,6 +275,12 @@ export default function App() {
           </small>
         </div>
         <div className="row">
+          <button
+            onClick={() => window.open(`${window.location.pathname}#scene`, 'regie-scene', 'popup,width=1280,height=720')}
+            title="Ouvre une deuxième fenêtre : les instruments qui jouent, en grand"
+          >
+            🖥 Écran instruments
+          </button>
           <button onClick={() => setView('print')}>🖨 Conducteurs papier</button>
           <button className="ghost" onClick={() => downloadJson(project)}>
             Enregistrer le projet
@@ -288,7 +317,7 @@ export default function App() {
         <label className="bpm">
           <span>
             ♩ = <strong>{Math.round(bpm)}</strong>
-            {bpmOverride === null ? <small> (partition)</small> : <small> (forcé)</small>}
+            {bpmOverride === null ? <small> (partition)</small> : <small> (réglé)</small>}
           </span>
           <input type="range" min={20} max={300} value={Math.round(bpm)} onChange={(e) => setBpmOverride(+e.target.value)} />
         </label>
@@ -297,6 +326,10 @@ export default function App() {
             Tempo partition
           </button>
         )}
+        <label className="small" title="Applique les changements de tempo écrits dans la partition (sinon le tempo reste constant)">
+          <input type="checkbox" checked={followScoreTempo} onChange={(e) => setFollowScoreTempo(e.target.checked)} />
+          Suivre les changements de tempo
+        </label>
         <label className="small">
           Aller à
           <select value={currentMeasure} onChange={(e) => seekMeasure(+e.target.value)}>
@@ -356,7 +389,7 @@ export default function App() {
         onEraseCell={eraseCell}
         onToggleSolo={toggleSolo}
         onPartColor={setPartColor}
-        position={{ measure: currentMeasure, fraction }}
+        position={pos}
         playing={playing}
         cameraColors={cameraColors}
         onToggleCell={toggleCell}
