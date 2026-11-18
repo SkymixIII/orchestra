@@ -1,0 +1,224 @@
+import { unzipSync, strFromU8 } from 'fflate';
+import type { Measure, Part, Score } from './model';
+
+const DEFAULT_TEMPO = 120;
+
+function kids(el: Element, name: string): Element[] {
+  return Array.from(el.children).filter((c) => c.localName === name);
+}
+function kid(el: Element, name: string): Element | undefined {
+  return kids(el, name)[0];
+}
+function text(el: Element | undefined, name?: string): string | undefined {
+  const target = el && name ? kid(el, name) : el;
+  const t = target?.textContent?.trim();
+  return t ? t : undefined;
+}
+function descendants(el: Element, name: string): Element[] {
+  return Array.from(el.getElementsByTagName(name));
+}
+
+const BEAT_UNIT_IN_QUARTERS: Record<string, number> = {
+  breve: 8,
+  whole: 4,
+  half: 2,
+  quarter: 1,
+  eighth: 0.5,
+  '16th': 0.25,
+  '32nd': 0.125,
+};
+
+/** Tempo en noires/minute trouvé dans une mesure (son > métronome), sinon undefined. */
+function tempoIn(measure: Element): number | undefined {
+  for (const sound of descendants(measure, 'sound')) {
+    const t = parseFloat(sound.getAttribute('tempo') ?? '');
+    if (t > 0) return t;
+  }
+  for (const metro of descendants(measure, 'metronome')) {
+    const unit = text(metro, 'beat-unit');
+    const perMinute = parseFloat(text(metro, 'per-minute') ?? '');
+    if (!unit || !(perMinute > 0)) continue;
+    let q = BEAT_UNIT_IN_QUARTERS[unit] ?? 1;
+    if (kid(metro, 'beat-unit-dot')) q *= 1.5;
+    return perMinute * q;
+  }
+  return undefined;
+}
+
+function rehearsalIn(measure: Element): string | undefined {
+  for (const r of descendants(measure, 'rehearsal')) {
+    const t = r.textContent?.trim();
+    if (t) return t;
+  }
+  return undefined;
+}
+
+/** Convertit une partition « timewise » en liste de mesures par part. */
+function measuresByPart(root: Element): Map<string, Element[]> {
+  const out = new Map<string, Element[]>();
+  if (root.localName === 'score-partwise') {
+    for (const p of kids(root, 'part')) out.set(p.getAttribute('id') ?? '', kids(p, 'measure'));
+  } else {
+    for (const m of kids(root, 'measure')) {
+      for (const p of kids(m, 'part')) {
+        const id = p.getAttribute('id') ?? '';
+        if (!out.has(id)) out.set(id, []);
+        // On garde l'attribut number de la mesure sur l'élément part.
+        if (!p.hasAttribute('number')) p.setAttribute('number', m.getAttribute('number') ?? '');
+        if (m.getAttribute('implicit')) p.setAttribute('implicit', m.getAttribute('implicit')!);
+        out.get(id)!.push(p);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Lit un document MusicXML (texte) et en extrait instruments, mesures, tempos,
+ * repères et la carte « qui joue dans quelle mesure ».
+ */
+export function parseMusicXml(xml: string, source: Score['source'] = 'musicxml'): Score {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) {
+    throw new Error('Fichier MusicXML illisible (XML invalide).');
+  }
+  const root = doc.documentElement;
+  if (root.localName !== 'score-partwise' && root.localName !== 'score-timewise') {
+    throw new Error("Ce fichier n'est pas une partition MusicXML (score-partwise attendu).");
+  }
+
+  const title =
+    text(kid(root, 'work') , 'work-title') ??
+    text(kid(root, 'movement-title')) ??
+    text(descendants(root, 'credit-words')[0]) ??
+    'Sans titre';
+
+  const partList = kid(root, 'part-list');
+  const parts: Part[] = (partList ? kids(partList, 'score-part') : []).map((sp, i) => ({
+    id: sp.getAttribute('id') ?? `P${i + 1}`,
+    name: text(sp, 'part-name') ?? text(sp, 'part-abbreviation') ?? `Instrument ${i + 1}`,
+    abbreviation: text(sp, 'part-abbreviation'),
+  }));
+
+  const byPart = measuresByPart(root);
+  // Parts présentes dans les mesures mais absentes de la part-list.
+  for (const id of byPart.keys()) {
+    if (!parts.some((p) => p.id === id)) parts.push({ id, name: id });
+  }
+  const measureCount = Math.max(0, ...parts.map((p) => byPart.get(p.id)?.length ?? 0));
+
+  const activity: Record<string, boolean[]> = {};
+  for (const p of parts) activity[p.id] = new Array(measureCount).fill(false);
+
+  const divisions = new Map<string, number>();
+  let timeBeats = 4;
+  let timeBeatType = 4;
+  let tempo = DEFAULT_TEMPO;
+  let start = 0;
+  const measures: Measure[] = [];
+
+  for (let m = 0; m < measureCount; m++) {
+    let label = String(m + 1);
+    let implicit = false;
+    let actualQuarters = 0;
+    let rehearsal: string | undefined;
+    let measureTempo: number | undefined;
+
+    parts.forEach((p, pi) => {
+      const el = byPart.get(p.id)?.[m];
+      if (!el) return;
+      if (pi === 0 || label === String(m + 1)) label = el.getAttribute('number') || label;
+      if (el.getAttribute('implicit') === 'yes') implicit = true;
+
+      let div = divisions.get(p.id) ?? 1;
+      let cursor = 0;
+      let maxCursor = 0;
+      let plays = false;
+      for (const child of Array.from(el.children)) {
+        switch (child.localName) {
+          case 'attributes': {
+            const d = parseFloat(text(child, 'divisions') ?? '');
+            if (d > 0) {
+              div = d;
+              divisions.set(p.id, d);
+            }
+            const time = kid(child, 'time');
+            if (time && pi === 0) {
+              const b = parseInt(text(time, 'beats') ?? '', 10);
+              const bt = parseInt(text(time, 'beat-type') ?? '', 10);
+              if (b > 0 && bt > 0) {
+                timeBeats = b;
+                timeBeatType = bt;
+              }
+            }
+            break;
+          }
+          case 'note': {
+            const isRest = !!kid(child, 'rest');
+            const isGrace = !!kid(child, 'grace');
+            const isChord = !!kid(child, 'chord');
+            const isCue = !!kid(child, 'cue');
+            if (!isRest && !isCue) plays = true;
+            if (!isGrace && !isChord) {
+              cursor += parseFloat(text(child, 'duration') ?? '0') || 0;
+            }
+            break;
+          }
+          case 'backup':
+            cursor -= parseFloat(text(child, 'duration') ?? '0') || 0;
+            break;
+          case 'forward':
+            cursor += parseFloat(text(child, 'duration') ?? '0') || 0;
+            break;
+        }
+        maxCursor = Math.max(maxCursor, cursor);
+      }
+      actualQuarters = Math.max(actualQuarters, maxCursor / div);
+      activity[p.id][m] = plays;
+      rehearsal ??= rehearsalIn(el);
+      measureTempo ??= tempoIn(el);
+    });
+
+    if (measureTempo) tempo = measureTempo;
+    const nominal = (timeBeats * 4) / timeBeatType;
+    const quarters = implicit && actualQuarters > 0 ? actualQuarters : actualQuarters > 0 ? Math.max(actualQuarters, nominal) : nominal;
+    measures.push({
+      label,
+      quarters,
+      startQuarter: start,
+      tempo,
+      time: `${timeBeats}/${timeBeatType}`,
+      rehearsal,
+    });
+    start += quarters;
+  }
+
+  if (!parts.length || !measures.length) {
+    throw new Error('Aucun instrument ou aucune mesure trouvé dans ce MusicXML.');
+  }
+  return { title, parts, measures, activity, source };
+}
+
+/** Extrait le MusicXML principal d'une archive .mxl (MusicXML compressé). */
+export function unzipMxl(data: Uint8Array): string {
+  const files = unzipSync(data);
+  const container = files['META-INF/container.xml'];
+  if (container) {
+    const doc = new DOMParser().parseFromString(strFromU8(container), 'application/xml');
+    const path = doc.getElementsByTagName('rootfile')[0]?.getAttribute('full-path');
+    if (path && files[path]) return strFromU8(files[path]);
+  }
+  const name = Object.keys(files).find((f) => !f.startsWith('META-INF') && /\.(xml|musicxml)$/i.test(f));
+  if (!name) throw new Error('Archive .mxl sans partition MusicXML.');
+  return strFromU8(files[name]);
+}
+
+/** Lit un fichier .musicxml / .xml / .mxl. */
+export async function readScoreFile(file: File, source: Score['source'] = 'musicxml'): Promise<Score> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const isZip = buf[0] === 0x50 && buf[1] === 0x4b; // "PK"
+  const xml = isZip ? unzipMxl(buf) : new TextDecoder().decode(buf);
+  const score = parseMusicXml(xml, source);
+  if (score.title === 'Sans titre') score.title = file.name.replace(/\.[^.]+$/, '');
+  return score;
+}
