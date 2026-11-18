@@ -11,9 +11,26 @@ function useWindowSize() {
   return size;
 }
 
+const MODE_KEY = 'regie-orchestre:scene-mode';
+
 /** Écran plein cadre : seuls les instruments qui jouent, en grand, partagent tout l'écran. */
 export function StageView() {
   const [state, setState] = useState<StageState | null>(null);
+  const [mode, setMode] = useState<'tout' | 'cameras'>(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === 'cameras' ? 'cameras' : 'tout';
+    } catch {
+      return 'tout';
+    }
+  });
+  const chooseMode = (m: 'tout' | 'cameras') => {
+    setMode(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* rien */
+    }
+  };
   const { w, h } = useWindowSize();
 
   useEffect(() => {
@@ -27,7 +44,11 @@ export function StageView() {
   }, []);
 
   const barH = 34;
-  const groups = state?.groups ?? [];
+  // « Tout » : un seul bloc. « Par caméra » : une colonne par caméra.
+  // (Si la fenêtre de régie tourne encore une ancienne version, `groups` est absent :
+  // on retombe sur la liste complète au lieu d'afficher « Silence ».)
+  const tiles = state?.tiles ?? [];
+  const groups = mode === 'cameras' && state?.groups ? state.groups : tiles.length ? [{ id: 'all', name: '', tiles }] : [];
   const total = groups.reduce((n, g) => n + g.tiles.length, 0);
   // Largeur des colonnes : racine du nombre d'instruments, pour qu'une caméra avec un seul
   // instrument garde une colonne lisible à côté d'une caméra qui en suit beaucoup.
@@ -48,7 +69,15 @@ export function StageView() {
             {state.top && <strong>{state.top}</strong>} mes. {state.measureLabel} {state.playing ? '▶' : '⏸'}
           </span>
         )}
-        <span className="stage-help">double-clic : plein écran</span>
+        <span className="stage-modes" onDoubleClick={(e) => e.stopPropagation()}>
+          <button className={mode === 'tout' ? 'active' : ''} onClick={() => chooseMode('tout')}>
+            Tout
+          </button>
+          <button className={mode === 'cameras' ? 'active' : ''} onClick={() => chooseMode('cameras')}>
+            Par caméra
+          </button>
+          <span className="stage-help">double-clic : plein écran</span>
+        </span>
       </div>
       {/* Une colonne par caméra (titre = nom de la caméra). */}
       <div className="stage-groups" style={{ padding: pad, gap }}>
