@@ -7,7 +7,7 @@ Appli web pour préparer la réalisation vidéo d'un concert d'orchestre :
 3. **Lecture** : défilement de la timeline avec BPM modifiable en direct, saut de mesures, mesures coupées. En lecture, **maintenir le bouton (ou la touche) d'un instrument** le marque comme jouant sur les mesures parcourues.
 4. **Tops globaux t1, t2, t3…** posés pendant la lecture (touche `T`). Le réalisateur annonce « t3 », chaque cadreur lit sa consigne pour ce top.
 5. **Caméras** : créez X caméras, assignez-leur des instruments. L'appli propose une consigne par caméra et par top (entrées / sorties de ses instruments), que vous corrigez à la main. Case vide = rien à faire.
-6. **Conducteurs papier** : une page par caméra, chaque ligne commence par où on en est (`t3 · mes. 45 · repère B +2 ≈ 2:35`). Les tops sans action sont grisés avec « rien à faire, prochaine action à t5 ». Un conducteur général (toutes caméras) est aussi disponible.
+6. **Conducteurs papier** : une page par caméra, chaque ligne commence par le top (`t3 ≈ 2:35`, plus la note du top si vous en avez mis une). Les cadreurs n'ayant pas la partition, ni mesures ni repères n'y figurent. Les tops sans action sont grisés avec « rien à faire, prochaine action à t5 ». Le conducteur général (réalisateur, toutes caméras) garde mesures et repères.
 
 Le projet est sauvegardé automatiquement dans le navigateur, et peut être enregistré/rouvert en fichier `.regie.json`.
 

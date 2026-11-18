@@ -127,10 +127,11 @@ kbd { font-family: ui-monospace, monospace; font-size: 11px; border: 1px solid v
 .sheet .operator { margin: 2px 0 0; font-size: 16px; }
 .sheet .meta { display: flex; flex-direction: column; text-align: right; font-size: 13px; }
 .script { list-style: none; padding: 0; margin: 0; }
-.script li { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ccc; break-inside: avoid; }
+.script li { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ccc; break-inside: avoid; }
 .script .where { display: grid; grid-template-columns: 48px 1fr; gap: 6px; align-items: baseline; font-size: 14px; }
 .script .tnum { font-size: 22px; font-weight: 800; min-width: 44px; }
 .script .clock { color: #666; font-size: 12px; }
+.script .cue { font-style: italic; font-size: 13px; }
 .script .what p { margin: 0; font-size: 17px; font-weight: 600; white-space: pre-wrap; }
 .script .what small { color: #555; }
 .script li.idle { color: #999; padding: 3px 0; }

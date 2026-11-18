@@ -38,9 +38,10 @@ function CameraSheet({ project, camera }: { project: Project; camera: Camera }) 
             <li key={nt.top.id} className={text ? 'action' : 'idle'}>
               <div className="where">
                 <span className="tnum">t{nt.number}</span>
+                {/* Les cadreurs n'ont pas la partition : pas de mesures ni de repères ici. */}
                 <span className="loc">
-                  {whereLabel(project, nt).split(' · ').slice(1).join(' · ')}
-                  <span className="clock"> ≈ {formatClock(clock[nt.top.measureIndex] ?? 0)}</span>
+                  <span className="clock">≈ {formatClock(clock[nt.top.measureIndex] ?? 0)}</span>
+                  {nt.top.note && <span className="cue"> · {nt.top.note}</span>}
                 </span>
               </div>
               <div className="what">
